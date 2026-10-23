@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labrador"
+version = "0.0.1"
+description = "Instrument control and data logging for Keysight and Tektronix bench instruments"
+requires-python = ">=3.12"
+dependencies = [
+    "pyvisa>=1.14",
+    "numpy>=2.0",
+    "scipy>=1.13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "pyinstaller>=6"]
+excel = ["openpyxl>=3.1"]
+
+[project.scripts]
+labrador = "labrador.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["labrador*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

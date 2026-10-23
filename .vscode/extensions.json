@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "anthropic.claude-code",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "mathworks.language-matlab",
+        "charliermarsh.ruff"
+    ]
+}
