@@ -10,7 +10,7 @@ file names shown.
 
 | Instrument | File name | Download |
 | --- | --- | --- |
-| Keysight EDUX1052A (InfiniiVision 1000 X-Series) | `keysight-1000x-programmers-guide.pdf` | [Keysight](https://www.keysight.com/us/en/assets/9018-06748/programming-guides/9018-06748.pdf) |
+| Keysight EDUX1052A (InfiniiVision 1000 X-Series) | `keysight-1000x-programmers-guide.pdf` | [Keysight](https://www.keysight.com/us/en/assets/9018-07747/programming-guides/9018-07747.pdf) |
 | Tektronix AFG1062 (AFG1000 Series) | `tektronix-afg1000-programmer-manual.pdf` | [Tektronix](https://www.tek.com/en/manual/function-generator/afg1000-series-arbitrary-function-generator-programmers-manual-afg1000) |
 
 A searchable text copy of each is generated next to the PDF:
