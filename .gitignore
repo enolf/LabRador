@@ -16,3 +16,4 @@ data/
 *.xlsx
 docs/manuals/*
 !docs/manuals/README.md
+.claude/settings.local.json
