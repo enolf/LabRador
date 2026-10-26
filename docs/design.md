@@ -132,7 +132,7 @@ Observe-mode logs are more useful when each capture records the stimulus, but ma
 
 - **Read-only:** only `*IDN?`, `SYSTem:ERRor?` and the `SOURce`/`OUTPut` setting queries. Never a setting command.
 - **Query briefly, then release:** read the generator's settings once per capture (or once per logging session), then return it to local control and close the connection. It is never held open between captures.
-- **Off by default until tested:** an option (`--gen-metadata`). If `scripts/hardware_check.py` shows the AFG1062's front panel responds immediately after being queried (or after return to local), it becomes the default; otherwise it stays opt-in and the documentation says why.
+- **On by default, tested:** `scripts/hardware_check.py` (2026-10-26, firmware FV:V1.0.2) showed the AFG1062's front panel responds after return to local in every run; in one of two runs it did not respond between the query and the return to local. Because the brief read always returns the generator to local, generator metadata is on by default and can be switched off (`generator_metadata=False`, `--no-gen-metadata` in Phase 3).
 - **Labelled honestly:** stored as `generator_settings`, which records what the generator was set to, not what reached the circuit.
 
 ### Behaviour that would interfere, and is banned in observe mode
@@ -223,8 +223,8 @@ Addresses look like `USB0::0x2A8D::0x....::<serial>::0::INSTR`. Use `\n` (LF) as
 | Trigger sweep ("Mode" on the front panel) | `:TRIGger:SWEep AUTO` or `NORMal` | 626 |
 | Averaging | `:ACQuire:TYPE AVERage`, `:ACQuire:COUNt 16` (2 to 65536); back with `:ACQuire:TYPE NORMal`. Read AVERage and HRESolution data as WORD. | 199, 190 |
 | Run / Stop / Single | `:RUN`, `:STOP`, `:SINGle` | 170, 174, 172 |
-| Run state | `:OPERegister:CONDition?` returns an integer: bit 3 (value 8) = running, bit 5 (value 32) = trigger armed. There is no `:RSTate?`, and no query distinguishes Single from Run. | 161 |
-| Trigger occurred | `:TER?` returns `1` if a trigger occurred since the last read, then clears | 175 |
+| Run state | `:OPERegister:CONDition?` returns an integer: bit 3 (value 8) = running, bit 5 (value 32) = trigger armed. There is no `:RSTate?`, and no query distinguishes Single from Run. **Observed** (firmware 02.12.2021071625): 40 while running and while Single waits for a trigger, 32 when stopped (after Stop or a completed Single), so bit 5 carries no information on this firmware. | 161 |
+| Trigger occurred | `:TER?` returns `1` if a trigger occurred since the last read, then clears. Observed: `0` while Single waits, `1` once it completes, and also `1` after Stop if the scope was triggering while running. | 175 |
 
 ### Oscilloscope: waveform transfer (allowed in observe mode)
 
@@ -257,7 +257,7 @@ Each `:MEASure` command installs a measurement on screen, and a query given a so
 | Frequency | `:MEASure:FREQuency? CHANnel<n>` | 380 |
 | Peak-to-peak | `:MEASure:VPP? CHANnel<n>` | 416 |
 | Phase between channels (degrees) | `:MEASure:PHASe? CHANnel1,CHANnel2` = delay / period of source 1 × 360 | 389 |
-| Delay between channels (s) | `:MEASure:DELay? CHANnel1,CHANnel2` = t(source 2) − t(source 1), using the edges set by `:MEASure:DEFine DELay` (the command form uses automatic edge selection instead) | 376–377 |
+| Delay between channels (s) | `:MEASure:DELay? CHANnel1,CHANnel2` = t(source 2) − t(source 1), using the edges set by `:MEASure:DEFine DELay` (the command form uses automatic edge selection instead). Observed with one 1 kHz signal on both channels: delay 6.5 µs (2.3°) while `:MEASure:PHASe?` gave −0.66° and a Python sine fit 0.27°, so prefer the sine fit (Section 9). | 376–377 |
 
 A returned value of 9.9E+37 means the measurement could not be made (page 367); treat any value above 1E30 as missing.
 
@@ -268,12 +268,12 @@ A returned value of 9.9E+37 means the measurement could not be made (page 367); 
 | Identify | `*IDN?` returns `TEKTRONIX,AFG1062,<serial>,SCPI:99.0 FV:<version>` | 15 |
 | Next error (`0` = none; 64-deep queue) | `SYSTem:ERRor?` (`SYSTem:ERRor[:NEXT]?`) returns `<code>,"<message>"` | 62, 67 |
 | Clear status / reset (control mode only) | `*CLS` / `*RST` | 14, 20 |
-| Wait for operations | Only `*WAI` is documented; `*OPC?` is not. Synchronise by querying `SYSTem:ERRor?`. | 66 |
+| Wait for operations | Only `*WAI` is documented; `*OPC?` is not. Observed: `*OPC?` replies `0`, not the standard `1`, so do not use it. Synchronise by querying `SYSTem:ERRor?`. | 66 |
 | Waveform shape | `SOURce<n>:FUNCtion:SHAPe SINusoid` (query returns `SIN`) | 43–44 |
 | Frequency | `SOURce<n>:FREQuency:FIXed <Hz>` (not available in Sweep run mode) | 36 |
-| Amplitude (Vpp) | `SOURce<n>:VOLTage:LEVel:IMMediate:AMPLitude <v>VPP`. The amplitude unit follows the front-panel menu, so always send the `VPP` suffix. | 61 |
+| Amplitude (Vpp) | `SOURce<n>:VOLTage:LEVel:IMMediate:AMPLitude <v>VPP`. The amplitude unit follows the front-panel menu, so always send the `VPP` suffix (confirmed on hardware: `1VPP` shows 1.000 Vpp). | 61 |
 | Offset | `SOURce<n>:VOLTage:LEVel:IMMediate:OFFSet <v>` | 61 |
-| Load setting | `OUTPut<n>:IMPedance INFinity` or `50` (1 Ω to 10 kΩ); the manual says the query returns `9.9E+37` for INFinity. **Deviation:** firmware FV:V1.0.2 replies `50Ω` with the Ω encoded in GBK (bytes `A6 B8`), not a plain number (observed 2026-10-26); LabRador decodes AFG replies as GBK and reads the leading number. The reply at INFinity is recorded by the `--control` hardware check. | 18 |
+| Load setting | `OUTPut<n>:IMPedance INFinity` or `50` (1 Ω to 10 kΩ); the manual says the query returns `9.9E+37` for INFinity. **Deviation:** firmware FV:V1.0.2 replies `50Ω` with the Ω encoded in GBK (bytes `A6 B8`), not a plain number (observed 2026-10-26); LabRador decodes AFG replies as GBK and reads the leading number. At INFinity it replies `9.9E+37Ω`. | 18 |
 | Output on/off | `OUTPut<n>:STATe ON` or `OFF` (query returns `0` or `1`) | 18–19 |
 | Align the two channels' phase | `SOURce1:PHASe:INITiate` (either suffix aligns both channels; no query form) | 46 |
 | Return to local | No SCPI command in the manual (error −201 "Invalid while in local" exists). LabRador sends the VISA go-to-local control on close; the effect is checked with the hardware check. | 62 |
@@ -471,15 +471,15 @@ The build runs in ten phases, each ending with something that works on its own; 
 
 ### Phase 1: Instrument drivers
 
-- [ ] `Instrument` base class: connect, write, query, binary block read with flush, timeouts, `SYSTem:ERRor?` check after commands, release to local on close.
-- [ ] Mode flag (observe/control) with the allow-list from Section 3; setting commands raise in observe mode.
-- [ ] Error types: `VisaNotFoundError`, `InstrumentNotFoundError`, `InstrumentNotRespondingError`.
-- [ ] `Scope` class (EDUX1052A): waveform read with preamble scaling, preamble re-check, settings query, run state, screenshot; control-mode setters.
-- [ ] `Generator` class (AFG1062): shape, frequency, amplitude, offset, output, load setting. Verify every command against the AFG1000 manual.
-- [ ] Simulated `Scope` and `Generator` returning synthetic waveforms (e.g. sine plus noise; for the cable experiment, the transmission-line model in Section 12).
-- [ ] `pytest` suite against the simulators; a hand-run hardware test script.
+- [x] `Instrument` base class: connect, write, query, binary block read with flush, timeouts, `SYSTem:ERRor?` check after commands, release to local on close.
+- [x] Mode flag (observe/control) with the allow-list from Section 3; setting commands raise in observe mode.
+- [x] Error types: `VisaNotFoundError`, `InstrumentNotFoundError`, `InstrumentNotRespondingError`.
+- [x] `Scope` class (EDUX1052A): waveform read with preamble scaling, preamble re-check, settings query, run state, screenshot; control-mode setters.
+- [x] `Generator` class (AFG1062): shape, frequency, amplitude, offset, output, load setting. Verify every command against the AFG1000 manual.
+- [x] Simulated `Scope` and `Generator` returning synthetic waveforms (e.g. sine plus noise; for the cable experiment, the transmission-line model in Section 12).
+- [x] `pytest` suite against the simulators; a hand-run hardware test script.
 
-* [ ] Instruments connect independently; a missing instrument raises `InstrumentNotConnectedError` only when a task needs it (Section 2, Working with one instrument).
+* [x] Instruments connect independently; a missing instrument raises `InstrumentNotConnectedError` only when a task needs it (Section 2, Working with one instrument).
 
 **Done when:** a short script sets the generator and pulls a correctly scaled waveform from the scope, and observe mode demonstrably refuses a setting command.
 
@@ -726,12 +726,13 @@ Decisions made so far, newest first, followed by the questions still to settle. 
 
 - [ ] Exact R&S VISA download size and current download page URL.
 - [x] Does `:RSTate?` exist on the EDUX1052A? No. Use `:OPERegister:CONDition?` (bit 3 running, bit 5 armed) and `:TER?` (Section 5).
-- [ ] How can capture-on-Single tell a completed Single from the user pressing Stop? Decide in Phase 2 from the bit patterns recorded by the hardware check.
+- [ ] How can capture-on-Single tell a completed Single from the user pressing Stop? Both end in run state 32 with `:TER?` = 1 (Section 5), so the registers cannot tell them apart. Decide in Phase 2.
 - [x] Do `:MEASure:PHASe?` and `:MEASure:DELay?` take two sources as written? Yes (pages 389, 376).
 - [x] Confirm every AFG1062 command in Section 5 against the AFG1000 manual. Done; phase alignment is `SOURce1:PHASe:INITiate`.
-- [ ] Does the AFG1062 answer `*OPC?` (not in its manual)? Hardware check.
-- [ ] Does the AFG1062 amplitude follow the `VPP` suffix whatever unit the front panel shows? Hardware check.
-- [ ] How does the AFG1062 return to local control after remote commands? The manual has no command; check VISA go-to-local, and whether a query alone locks the front panel, with the hardware check. The answer sets the `--gen-metadata` default.
+- [x] Does the AFG1062 answer `*OPC?` (not in its manual)? It replies `0`; not used.
+- [x] Does the AFG1062 amplitude follow the `VPP` suffix? Yes (1 Vpp set, 1.000 Vpp shown, 1.045 V peak-to-peak measured on the scope).
+- [x] How does the AFG1062 return to local control after remote commands? The VISA go-to-local control works; a query alone locked the front panel in one of two runs. Generator metadata is on by default (Section 3).
+- [ ] After a Single at 5 ms/div (first hardware check, 2026-10-26), `:WAVeform:POINts 1000` returned -222 "Data out of range" once; not reproduced in two later runs. Watch for it in Phase 2 logging.
 - [ ] Can the `.exe` run on a JCU lab PC, and do lab PCs already have a VISA installed?
 - [ ] Will lab technical staff add LabRador and R&S VISA to the lab image?
 - [ ] Final `.mat` field names and CLI exit-code numbers (Phases 2 and 3).

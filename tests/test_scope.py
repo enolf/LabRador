@@ -217,10 +217,11 @@ def test_run_state_and_trigger_event(device, scope):
     assert scope.trigger_occurred() is True
     assert scope.trigger_occurred() is False
     device.press_stop()
+    assert scope.run_state().raw == 32
     assert scope.run_state().running is False
     device.press_single()
     state = scope.run_state()
-    assert state.running and state.armed
+    assert state.running
     assert state.raw == 8 | 32
     device.deliver_trigger()
     assert scope.run_state().running is False

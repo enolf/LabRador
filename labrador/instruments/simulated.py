@@ -9,8 +9,8 @@ from labrador.instruments.scpi import ScpiCommand, ScpiPattern, parse_message
 from labrador.instruments.transport import TransportError
 
 GENERATOR_SOURCE_OHMS = 50.0
-INFINITY_REPLY = "9.9E+37"
 OHM_SIGN = "Ω"
+INFINITY_REPLY = "9.9E+37" + OHM_SIGN
 
 _QUANTITY = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*([a-zA-Z]*)\s*$")
 _FREQUENCY_UNITS = {"": 1.0, "HZ": 1.0, "KHZ": 1e3, "MHZ": 1e6}
@@ -409,10 +409,7 @@ class SimulatedScopeDevice(SimulatedDevice):
         self._knob_turns = count
 
     def status_register(self) -> int:
-        if not self.running:
-            return 0
-        waiting = self.single_pending or self._trigger_offset() is None
-        return RUN_BIT | (WAIT_TRIGGER_BIT if waiting else 0)
+        return WAIT_TRIGGER_BIT | (RUN_BIT if self.running else 0)
 
     def _reset_state(self) -> None:
         self.channels = {1: ScopeChannelState(), 2: ScopeChannelState()}

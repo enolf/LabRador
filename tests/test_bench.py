@@ -98,7 +98,7 @@ def test_observe_mode_never_holds_the_generator():
     manager = FakeResourceManager(
         {SCOPE_ADDRESS: scope_resource(), GENERATOR_ADDRESS: generator_resource()}
     )
-    bench = Bench.connect(generator=True, resource_manager=manager)
+    bench = Bench.connect(generator=True, generator_metadata=False, resource_manager=manager)
     assert GENERATOR_ADDRESS not in manager.opened
     assert bench.status()["generator"] == "not used (observe mode)"
     with pytest.raises(ObserveModeError, match="front panel"):
@@ -135,6 +135,11 @@ def test_observe_generator_metadata_opens_queries_and_releases():
     assert generator.ren_calls
     assert generator.written == []
     assert bench.status()["generator"] == "queried briefly for settings (observe mode)"
+
+
+def test_generator_metadata_is_on_by_default_after_the_hardware_check():
+    bench = Bench.connect(resource_manager=FakeResourceManager({SCOPE_ADDRESS: scope_resource()}))
+    assert bench.generator_metadata is True
 
 
 def test_observe_generator_metadata_returns_none_when_absent():
