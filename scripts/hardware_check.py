@@ -238,7 +238,7 @@ def sample_run_state(scope: Scope, interval_s: float) -> list[dict[str, object]]
     samples = []
     for _ in range(RUN_STATE_SAMPLES):
         state = scope.run_state()
-        samples.append({"raw": state.raw, "running": state.running, "armed": state.armed})
+        samples.append({"raw": state.raw, "running": state.running})
         time.sleep(interval_s)
     samples.append({"trigger_occurred": scope.trigger_occurred()})
     return samples

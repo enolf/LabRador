@@ -132,7 +132,7 @@ Observe-mode logs are more useful when each capture records the stimulus, but ma
 
 - **Read-only:** only `*IDN?`, `SYSTem:ERRor?` and the `SOURce`/`OUTPut` setting queries. Never a setting command.
 - **Query briefly, then release:** read the generator's settings once per capture (or once per logging session), then return it to local control and close the connection. It is never held open between captures.
-- **On by default, tested:** `scripts/hardware_check.py` (2026-10-26, firmware FV:V1.0.2) showed the AFG1062's front panel responds after return to local in every run; in one of two runs it did not respond between the query and the return to local. Because the brief read always returns the generator to local, generator metadata is on by default and can be switched off (`generator_metadata=False`, `--no-gen-metadata` in Phase 3).
+- **On by default, tested:** `scripts/hardware_check.py` (2026-10-26, firmware FV:V1.0.2) showed the AFG1062's front panel keeps responding after it is queried, and after return to local. Because the brief read also returns the generator to local, generator metadata is on by default and can be switched off (`generator_metadata=False`, `--no-gen-metadata` in Phase 3).
 - **Labelled honestly:** stored as `generator_settings`, which records what the generator was set to, not what reached the circuit.
 
 ### Behaviour that would interfere, and is banned in observe mode
@@ -731,7 +731,7 @@ Decisions made so far, newest first, followed by the questions still to settle. 
 - [x] Confirm every AFG1062 command in Section 5 against the AFG1000 manual. Done; phase alignment is `SOURce1:PHASe:INITiate`.
 - [x] Does the AFG1062 answer `*OPC?` (not in its manual)? It replies `0`; not used.
 - [x] Does the AFG1062 amplitude follow the `VPP` suffix? Yes (1 Vpp set, 1.000 Vpp shown, 1.045 V peak-to-peak measured on the scope).
-- [x] How does the AFG1062 return to local control after remote commands? The VISA go-to-local control works; a query alone locked the front panel in one of two runs. Generator metadata is on by default (Section 3).
+- [x] How does the AFG1062 return to local control after remote commands? The VISA go-to-local control works, and a query alone does not lock the front panel (one contrary answer in an earlier run was a mistaken answer). Generator metadata is on by default (Section 3).
 - [ ] After a Single at 5 ms/div (first hardware check, 2026-10-26), `:WAVeform:POINts 1000` returned -222 "Data out of range" once; not reproduced in two later runs. Watch for it in Phase 2 logging.
 - [ ] Can the `.exe` run on a JCU lab PC, and do lab PCs already have a VISA installed?
 - [ ] Will lab technical staff add LabRador and R&S VISA to the lab image?

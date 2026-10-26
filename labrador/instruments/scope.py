@@ -18,7 +18,6 @@ SCREENSHOT_TIMEOUT_S = 20.0
 FULL_MEMORY_TIMEOUT_S = 20.0
 COMMAND_TIMEOUT_S = 20.0
 RUN_BIT = 1 << 3
-WAIT_TRIGGER_BIT = 1 << 5
 PEAK_DETECT_TYPE = 1
 NORMAL_POINTS = (100, 250, 500, 1000)
 FULL_MEMORY_POINTS = (
@@ -161,7 +160,6 @@ class Waveform:
 @dataclass(frozen=True)
 class RunState:
     running: bool
-    armed: bool
     raw: int
 
 
@@ -374,7 +372,7 @@ class Scope(Instrument):
 
     def run_state(self) -> RunState:
         raw = self.query_int(":OPERegister:CONDition?")
-        return RunState(running=bool(raw & RUN_BIT), armed=bool(raw & WAIT_TRIGGER_BIT), raw=raw)
+        return RunState(running=bool(raw & RUN_BIT), raw=raw)
 
     def trigger_occurred(self) -> bool:
         return self.query_int(":TER?") == 1
