@@ -67,7 +67,7 @@ class ObserveModeError(LabradorError):
     def __init__(self, command: str, reason: str) -> None:
         self.command = command
         self.reason = reason
-        super().__init__(f"Refused to send {command!r}: {reason}")
+        super().__init__(f"Refused to send {command!r}: {reason}" if command else reason)
 
 
 class InstrumentCommandError(LabradorError):
