@@ -151,6 +151,18 @@ def test_close_never_raises():
     assert transport.calls == ["go_to_local", "close"]
 
 
+def test_go_to_local_without_closing_reports_support():
+    transport = ScriptedTransport({":LEVel?": "1"})
+    instrument = make(transport)
+    assert instrument.go_to_local() is True
+    transport.go_to_local_result = False
+    assert instrument.go_to_local() is False
+    transport.go_to_local_result = RuntimeError("no")
+    assert instrument.go_to_local() is False
+    assert instrument.query(":LEVel?") == "1"
+    assert "close" not in transport.calls
+
+
 def test_closed_instrument_refuses_io():
     instrument = make()
     instrument.close()

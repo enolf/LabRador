@@ -285,16 +285,23 @@ class Instrument:
                 errors.append((code, message))
         return errors
 
+    def go_to_local(self) -> bool:
+        with self._lock:
+            try:
+                supported = self._transport.go_to_local()
+            except Exception as error:
+                logger.warning("%s: go-to-local failed: %s", self.description, error)
+                return False
+        if not supported:
+            logger.info("%s: go-to-local is not supported", self.description)
+        return supported
+
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
         with self._lock:
-            try:
-                if not self._transport.go_to_local():
-                    logger.info("%s: go-to-local is not supported", self.description)
-            except Exception as error:
-                logger.warning("%s: go-to-local failed: %s", self.description, error)
+            self.go_to_local()
             _close_quietly(self._transport)
 
     def _ensure_allowed(self, command: str) -> None:
