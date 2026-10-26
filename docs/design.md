@@ -114,26 +114,38 @@ LabRador has two modes, enforced in the driver layer: **observe** (the default, 
 | --- | --- | --- |
 | Changes instrument settings | Never | Yes |
 | Stops or starts acquisition | Never | Yes (`:DIGitize`, Single, Run) |
-| Connects to the generator | No | When the task needs it |
+| Connects to the generator | Read-only and briefly, opt-in (see Generator in observe mode) | When the task needs it |
 | Measurements | Calculated in Python from waveform data | Calculated in Python, or queried from the scope |
 | Typical use | Logging what the user set up on the front panel | Automated sweeps, scripted experiments |
 
 ### Enforcement
 
 - The driver keeps a mode flag. In observe mode, only queries (`...?`) and waveform-transfer commands are allowed; any other command raises an error. Neither the GUI nor a student's script can take over the scope by accident.
-- **Exception:** waveform-transfer settings (`:WAVeform:SOURce`, `:WAVeform:FORMat`, `:WAVeform:POINts`, `:WAVeform:POINts:MODE`, `:WAVeform:UNSigned`) are allowed in observe mode. They affect only how data is sent, not the screen or acquisition.
+- **Exception:** waveform-transfer settings (`:WAVeform:SOURce`, `:WAVeform:FORMat`, `:WAVeform:BYTeorder`, `:WAVeform:POINts`, `:WAVeform:POINts:MODE`, `:WAVeform:UNSigned`) are allowed in observe mode. They affect only how data is sent, not the screen or acquisition.
+- The allow-list is explicit and fails closed: only the listed queries and waveform-transfer settings pass. Side-effecting queries such as `*TST?` (self-test) and every `:MEASure` query are refused.
+- `:SYSTem:LOCK` (front-panel lock, equivalent to VISA local lockout) is refused in both modes.
 - Observe mode lives in the library, so it protects the Python, CLI, server and MATLAB routes equally.
+
+### Generator in observe mode
+
+Observe-mode logs are more useful when each capture records the stimulus, but many instruments switch to a remote state on any USB command, including a query, and may then ignore their front panel until returned to local. Polling the generator must never lock out the student turning its knobs.
+
+- **Read-only:** only `*IDN?`, `SYSTem:ERRor?` and the `SOURce`/`OUTPut` setting queries. Never a setting command.
+- **Query briefly, then release:** read the generator's settings once per capture (or once per logging session), then return it to local control and close the connection. It is never held open between captures.
+- **Off by default until tested:** an option (`--gen-metadata`). If `scripts/hardware_check.py` shows the AFG1062's front panel responds immediately after being queried (or after return to local), it becomes the default; otherwise it stays opt-in and the documentation says why.
+- **Labelled honestly:** stored as `generator_settings`, which records what the generator was set to, not what reached the circuit.
 
 ### Behaviour that would interfere, and is banned in observe mode
 
 - `:DIGitize` stops the scope after each capture, overriding the user's Run/Stop choice. The original `ScopeControl.m` used it every frame.
 - `*RST`, `:AUToscale`, and setting V/div, timebase, trigger or averaging override the user's setup. `CableSweep.m` does all of these, which is correct in control mode only.
-- Measurement queries such as `:MEASure:FREQuency?` may add a measurement to the scope's on-screen list on InfiniiVision scopes. Observe mode calculates measurements from the downloaded waveform instead.
+- `:MEASure` commands install a measurement in the scope's on-screen list, and a `:MEASure` query given a source changes the current measurement source. Observe mode calculates measurements from the downloaded waveform instead.
 
 ### Data capture without interfering
 
 - **Continuous logging while running:** periodically read the latest waveform with `:WAVeform:DATA?` while the scope runs normally. The on-screen record (`NORMal` points mode) is available while running; full-memory `RAW` reads generally need the scope stopped.
-- **Capture on Single:** poll the run state with `:RSTate?`. When the user presses Single on the front panel and the acquisition completes, save it automatically. The user controls everything physically and simply gets files.
+- **Capture on Single:** poll the run state with `:OPERegister:CONDition?` (bit 3 = running, bit 5 = trigger armed) and `:TER?` (a trigger occurred since the last read). When the user presses Single on the front panel and the acquisition completes, save it automatically. The user controls everything physically and simply gets files. The EDUX1052A has no `:RSTate?` and no query that tells Single from Run, so the detection rule is settled in Phase 2 from the bit patterns recorded by the hardware check.
+- **Only displayed channels can be read:** the `:WAVeform` queries work only when the selected channel is switched on, and observe mode cannot switch it on.
 - **Settings changed mid-transfer:** if the user turns a knob between reading the preamble and reading the data, the scaling will not match the data. Re-read the preamble after the data; if it changed, discard the frame.
 - **Settings as metadata:** each saved capture records the front-panel settings at the time (V/div, timebase, trigger, coupling, probe), queried read-only. Useful for lab reports.
 
@@ -171,88 +183,101 @@ The same code ships in three forms, and each user picks the one that matches whe
 
 ## 5. Instruments and SCPI reference
 
-Both instruments speak SCPI over USB (USBTMC), so the same commands work from MATLAB, Python or any VISA tool. The commands below are the ones used in the prototypes; those marked *verify* have not yet been checked against the programmer manual and must be before the drivers are finalised.
+Both instruments speak SCPI over USB (USBTMC), so the same commands work from MATLAB, Python or any VISA tool. Every command below was checked against the programmer manuals on 2026-10-26; page numbers refer to those manuals (for the Keysight guide the PDF page equals the printed page; for the AFG1000 manual the PDF page is the printed page + 9). Behaviour the manuals leave open is checked on the hardware with `scripts/hardware_check.py`.
 
 | Instrument | Model | Connection | USB vendor ID | Reference manual |
 | --- | --- | --- | --- | --- |
-| Oscilloscope | Keysight EDUX1052A (InfiniiVision 1000 X-Series), 2 ch, 50 MHz | Rear USB device port (USB-B); the front port is a host port for flash drives | `0x2A8D` | InfiniiVision 1000 X-Series Programmer's Guide (Keysight, free PDF) |
-| Function generator | Tektronix AFG1062, 2 ch, 60 MHz sine, 50 Ω output | Rear USB device port | `0x0699` | AFG1000 Series Programmer Manual (Tektronix, free PDF) |
+| Oscilloscope | Keysight EDUX1052A (InfiniiVision 1200 X-Series family), 2 ch, 50 MHz | Rear USB device port (USB-B); the front port is a host port for flash drives | `0x2A8D` | InfiniiVision 1200 X-Series and EDUX1052A/G Oscilloscopes Programmer's Guide (Keysight, free PDF) |
+| Function generator | Tektronix AFG1062, 2 ch, 60 MHz sine, 50 Ω output | Rear USB device port | `0x0699` | AFG1000 Series Programmer Manual 077-1129-02 (Tektronix, free PDF) |
 
 Addresses look like `USB0::0x2A8D::0x....::<serial>::0::INSTR`. Use `\n` (LF) as the terminator for both.
 
 ### Oscilloscope: connection and setup
 
-| Purpose | Command |
-| --- | --- |
-| Identify | `*IDN?` |
-| Clear status | `*CLS` |
-| Last error (`+0,...` = none) | `:SYSTem:ERRor?` |
-| Wait for operations to finish | `*OPC?` |
-| Reset (control mode only) | `*RST` |
-| Autoscale (control mode only) | `:AUToscale` |
+| Purpose | Command | Page |
+| --- | --- | --- |
+| Identify | `*IDN?` returns `KEYSIGHT TECHNOLOGIES,<model>,<serial>,X.XX.XX` | 126 |
+| Clear status (control mode only: it also empties the error queue) | `*CLS` | 121 |
+| Next error (`0` or `+0` = none; 30-deep queue) | `:SYSTem:ERRor?` returns `<code>,"<message>"` | 581 |
+| Wait for operations to finish | `*OPC?` returns `1` | 128 |
+| Factory reset (control mode only) | `*RST` (probe 10:1, CH2 off, 5 V/div); `:SYSTem:PRESet` is the gentler [Default Setup] | 131, 586 |
+| Autoscale (control mode only) | `:AUToscale`; also turns off measurements, cursors and math | 147 |
+| Front-panel lock (never sent, in either mode) | `:SYSTem:LOCK ON` is local lockout; `:SYSTem:LOCK?` may be queried | 582 |
 
 ### Oscilloscope: channel, timebase, trigger (control mode to set; queries allowed in observe)
 
-| Purpose | Command |
-| --- | --- |
-| Display on/off | `:CHANnel<n>:DISPlay 1` or `0` |
-| Vertical scale (V/div) | `:CHANnel<n>:SCALe <v>` |
-| Offset (V at screen centre) | `:CHANnel<n>:OFFSet <v>` |
-| Coupling | `:CHANnel<n>:COUPling DC` or `AC` |
-| Probe attenuation | `:CHANnel<n>:PROBe 1` or `10` |
-| Time/div | `:TIMebase:SCALe <s>` |
-| Horizontal position | `:TIMebase:POSition <s>` |
-| Trigger source | `:TRIGger:EDGE:SOURce CHANnel1`, `CHANnel2` or `EXT` |
-| Trigger level | `:TRIGger:EDGE:LEVel <v>` |
-| Trigger slope | `:TRIGger:EDGE:SLOPe POSitive`, `NEGative`, `EITHer` or `ALTernate` |
-| Trigger sweep | `:TRIGger:SWEep AUTO` or `NORMal` |
-| Averaging | `:ACQuire:TYPE AVERage`, `:ACQuire:COUNt 16`; back with `:ACQuire:TYPE NORMal` |
-| Run / Stop / Single | `:RUN`, `:STOP`, `:SINGle` |
-| Run state (*verify*) | `:RSTate?` returns RUN, STOP or SING |
+| Purpose | Command | Page |
+| --- | --- | --- |
+| Display on/off | `:CHANnel<n>:DISPlay 1` or `0` | 217 |
+| Vertical scale (V/div) | `:CHANnel<n>:SCALe <v>` | 229 |
+| Offset (V at screen centre) | `:CHANnel<n>:OFFSet <v>` (out-of-range values are clamped silently) | 221 |
+| Coupling | `:CHANnel<n>:COUPling DC` or `AC` | 216 |
+| Probe attenuation | `:CHANnel<n>:PROBe 1` or `10` (any ratio 0.1 to 10000) | 222 |
+| Time/div | `:TIMebase:SCALe <s>` | 609 |
+| Horizontal position | `:TIMebase:POSition <s>` (alias of `:TIMebase:DELay`) | 606 |
+| Timebase mode, reference (queried for metadata) | `:TIMebase:MODE?` returns `MAIN`, `WIND`, `XY` or `ROLL`; `:TIMebase:REFerence?` | 605, 608 |
+| Trigger type (queried for metadata) | `:TRIGger:MODE?` returns `EDGE`, `GLIT`, `TV`, ... or `NONE` in ROLL/XY | 624 |
+| Trigger source | `:TRIGger[:EDGE]:SOURce CHANnel1`, `CHANnel2` or `EXTernal`; the query may return `NONE` | 632 |
+| Trigger level | `:TRIGger[:EDGE]:LEVel <v>` | 629 |
+| Trigger slope | `:TRIGger[:EDGE]:SLOPe POSitive`, `NEGative`, `EITHer` or `ALTernate` | 631 |
+| Trigger sweep ("Mode" on the front panel) | `:TRIGger:SWEep AUTO` or `NORMal` | 626 |
+| Averaging | `:ACQuire:TYPE AVERage`, `:ACQuire:COUNt 16` (2 to 65536); back with `:ACQuire:TYPE NORMal`. Read AVERage and HRESolution data as WORD. | 199, 190 |
+| Run / Stop / Single | `:RUN`, `:STOP`, `:SINGle` | 170, 174, 172 |
+| Run state | `:OPERegister:CONDition?` returns an integer: bit 3 (value 8) = running, bit 5 (value 32) = trigger armed. There is no `:RSTate?`, and no query distinguishes Single from Run. | 161 |
+| Trigger occurred | `:TER?` returns `1` if a trigger occurred since the last read, then clears | 175 |
 
 ### Oscilloscope: waveform transfer (allowed in observe mode)
 
-| Purpose | Command |
-| --- | --- |
-| Select channel | `:WAVeform:SOURce CHANnel<n>` |
-| 8-bit data / 16-bit data | `:WAVeform:FORMat BYTE` / `WORD` + `:WAVeform:BYTeorder LSBFirst` |
-| Unsigned values | `:WAVeform:UNSigned ON` |
-| Screen record / full memory | `:WAVeform:POINts:MODE NORMal` / `RAW` (RAW generally needs the scope stopped) |
-| Number of points | `:WAVeform:POINts <n>` |
-| Acquire once and stop (control mode only) | `:DIGitize CHANnel1,CHANnel2` |
-| Scaling preamble | `:WAVeform:PREamble?` (10 comma-separated values) |
-| Data | `:WAVeform:DATA?` returns an IEEE 488.2 definite-length block, then a trailing LF that must be flushed |
-| Screenshot | `:DISPlay:DATA? PNG, COLor` (binary block; allow about 20 s timeout) |
+| Purpose | Command | Page |
+| --- | --- | --- |
+| Select channel | `:WAVeform:SOURce CHANnel<n>`; the `:WAVeform` queries only work when that channel is displayed | 684, 665 |
+| 8-bit data / 16-bit data | `:WAVeform:FORMat BYTE` / `WORD` + `:WAVeform:BYTeorder LSBFirst` (the default is MSBFirst, so send it explicitly) | 674, 670 |
+| Unsigned values | `:WAVeform:UNSigned ON` | 690 |
+| Screen record / full memory | `:WAVeform:POINts:MODE NORMal` / `RAW` / `MAXimum`. RAW needs the scope stopped, `:TIMebase:MODE MAIN` and `:ACQuire:TYPE NORMal` or `HRESolution`. | 677 |
+| Number of points | `:WAVeform:POINts <n>`: 100, 250, 500 or 1000 in NORMal mode; up to 100 000 in RAW/MAXimum; AVERage is capped at 8192 | 675, 666–667 |
+| Acquire once and stop (control mode only) | `:DIGitize CHANnel1,CHANnel2` (only in MAIN or WINDow timebase mode; abort with a device clear) | 153 |
+| Scaling preamble | `:WAVeform:PREamble?` (10 comma-separated values) | 679 |
+| Data | `:WAVeform:DATA?` returns an IEEE 488.2 definite-length block (`#8` + 8 digits), then a trailing LF that must be flushed | 672, 668 |
+| Screenshot | `:DISPlay:DATA? PNG, COLor` (binary block; the manual's example allows 15 s, use 20 s) | 244 |
 
-Preamble fields used (1-based): 5 = x increment, 6 = x origin, 7 = x reference, 8 = y increment, 9 = y origin, 10 = y reference. For sample index k = 0, 1, ..., N−1 and raw value D:
+Preamble fields (1-based): 1 = format (0 BYTE, 1 WORD, 4 ASCii), 2 = type, 3 = points, 4 = count, 5 = x increment, 6 = x origin, 7 = x reference, 8 = y increment, 9 = y origin, 10 = y reference. For sample index k = 0, 1, ..., N−1 and raw value D:
 
 ```latex
 t_k = (k - x_{\mathrm{ref}})\,\Delta x + x_{\mathrm{orig}}, \qquad V_k = (D_k - y_{\mathrm{ref}})\,\Delta y + y_{\mathrm{orig}}
 ```
 
+Special raw values (unsigned): `0` = hole (no data acquired; stored as NaN), `1` = clipped at the bottom of the screen, `255` (BYTE) or `65535` (WORD) = clipped at the top. WORD data is left-shifted to 16 bits, so the lowest 4 bits are zero (page 669).
+
 ### Oscilloscope: measurements (control mode; observe mode calculates them in Python)
 
-| Purpose | Command |
-| --- | --- |
-| Frequency | `:MEASure:FREQuency? CHANnel<n>` |
-| Peak-to-peak | `:MEASure:VPP? CHANnel<n>` |
-| Phase between channels (*verify*) | `:MEASure:PHASe? CHANnel1,CHANnel2` |
-| Delay between channels (*verify*) | `:MEASure:DELay? CHANnel1,CHANnel2` |
+Each `:MEASure` command installs a measurement on screen, and a query given a source changes the current measurement source (page 399), so none is allowed in observe mode.
 
-A returned value of about 9.9E37 means the measurement is invalid; treat any value above 1E30 as missing.
+| Purpose | Command | Page |
+| --- | --- | --- |
+| Frequency | `:MEASure:FREQuency? CHANnel<n>` | 380 |
+| Peak-to-peak | `:MEASure:VPP? CHANnel<n>` | 416 |
+| Phase between channels (degrees) | `:MEASure:PHASe? CHANnel1,CHANnel2` = delay / period of source 1 × 360 | 389 |
+| Delay between channels (s) | `:MEASure:DELay? CHANnel1,CHANnel2` = t(source 2) − t(source 1), using the edges set by `:MEASure:DEFine DELay` (the command form uses automatic edge selection instead) | 376–377 |
 
-### Function generator (all *verify* against the AFG1000 manual)
+A returned value of 9.9E+37 means the measurement could not be made (page 367); treat any value above 1E30 as missing.
 
-| Purpose | Command |
-| --- | --- |
-| Identify / error | `*IDN?`, `SYSTem:ERRor?` |
-| Waveform shape | `SOURce<n>:FUNCtion:SHAPe SINusoid` |
-| Frequency | `SOURce<n>:FREQuency:FIXed <Hz>` |
-| Amplitude (Vpp) | `SOURce<n>:VOLTage:LEVel:IMMediate:AMPLitude <v>` |
-| Offset | `SOURce<n>:VOLTage:LEVel:IMMediate:OFFSet <v>` |
-| Load setting | `OUTPut<n>:IMPedance INFinity` or `50` |
-| Output on/off | `OUTPut<n>:STATe ON` or `OFF` |
-| Align the two channels' phase | Front-panel "Align Phase" exists; find the SCPI equivalent in the manual |
+### Function generator
+
+| Purpose | Command | Page |
+| --- | --- | --- |
+| Identify | `*IDN?` returns `TEKTRONIX,AFG1062,<serial>,SCPI:99.0 FV:<version>` | 15 |
+| Next error (`0` = none; 64-deep queue) | `SYSTem:ERRor?` (`SYSTem:ERRor[:NEXT]?`) returns `<code>,"<message>"` | 62, 67 |
+| Clear status / reset (control mode only) | `*CLS` / `*RST` | 14, 20 |
+| Wait for operations | Only `*WAI` is documented; `*OPC?` is not. Synchronise by querying `SYSTem:ERRor?`. | 66 |
+| Waveform shape | `SOURce<n>:FUNCtion:SHAPe SINusoid` (query returns `SIN`) | 43–44 |
+| Frequency | `SOURce<n>:FREQuency:FIXed <Hz>` (not available in Sweep run mode) | 36 |
+| Amplitude (Vpp) | `SOURce<n>:VOLTage:LEVel:IMMediate:AMPLitude <v>VPP`. The amplitude unit follows the front-panel menu, so always send the `VPP` suffix. | 61 |
+| Offset | `SOURce<n>:VOLTage:LEVel:IMMediate:OFFSet <v>` | 61 |
+| Load setting | `OUTPut<n>:IMPedance INFinity` or `50` (1 Ω to 10 kΩ); the query returns `9.9E+37` for INFinity | 18 |
+| Output on/off | `OUTPut<n>:STATe ON` or `OFF` (query returns `0` or `1`) | 18–19 |
+| Align the two channels' phase | `SOURce1:PHASe:INITiate` (either suffix aligns both channels; no query form) | 46 |
+| Return to local | No SCPI command in the manual (error −201 "Invalid while in local" exists). LabRador sends the VISA go-to-local control on close; the effect is checked with the hardware check. | 62 |
+| Sync or trigger output | Not in the programmer manual. Burst and sweep accept an `EXTernal` trigger source, which implies a trigger input only. Check the rear panel and user manual. | 29, 59 |
 
 The `OUTPut:IMPedance` setting only changes the amplitude the generator displays. The physical source impedance is always 50 Ω. With the scope's 1 MΩ inputs, use `INFinity` so the set amplitude matches what the scope sees.
 
@@ -325,6 +350,7 @@ The `.mat` layout must be fixed in Phase 2 and then kept stable, because the MAT
 | `channels` | dict of float arrays, V | e.g. `{"ch1": ..., "ch2": ...}`; only enabled channels |
 | `settings` | dict | Per channel: V/div, offset, coupling, probe; timebase scale and position; trigger source, level, slope, sweep; acquisition type and count |
 | `instrument` | dict | `*IDN?` strings for each instrument used |
+| `generator_settings` | dict or empty | What the generator was set to (shape, frequency, amplitude, offset, load, output per channel), read once per capture; empty when not read (Section 3, Generator in observe mode). Not a measurement of what reached the circuit. |
 | `timestamp` | ISO 8601 string | When the capture completed |
 | `mode` | string | `observe` or `control` |
 | `labrador_version` | string | Toolkit version that wrote the file |
@@ -390,8 +416,11 @@ labrador/
 │   ├── __init__.py
 │   ├── instruments/
 │   │   ├── base.py
+│   │   ├── transport.py
+│   │   ├── scpi.py
 │   │   ├── scope.py
 │   │   ├── generator.py
+│   │   ├── bench.py
 │   │   └── simulated.py
 │   ├── measurements/
 │   │   ├── capture.py
@@ -407,6 +436,11 @@ labrador/
 │   ├── +labrador/
 │   └── examples/
 ├── tests/
+├── scripts/
+│   └── hardware_check.py
+├── prototypes/
+│   ├── ScopeControl.m
+│   └── CableSweep.m
 ├── docs/
 │   ├── manuals/
 │   ├── quickstart.md
@@ -578,6 +612,8 @@ Claude Code does the bulk of the implementation; your job is to plan each phase 
 
 ### Draft `CLAUDE.md`
 
+The repository's `CLAUDE.md` is now the master copy and has moved on from this draft (for example its Manuals section); the draft is kept for reference.
+
 ```markdown
 # LabRador
 
@@ -670,6 +706,11 @@ Decisions made so far, newest first, followed by the questions still to settle. 
 
 | Date | Decision | Reason |
 | --- | --- | --- |
+| 2026-10-26 | Observe-mode allow-list is explicit and fails closed; `:SYSTem:LOCK` refused in both modes | Unlisted queries can have side effects (`*TST?`, `:MEASure`) |
+| 2026-10-26 | Generator may be queried in observe mode: read-only, briefly, released at once, opt-in until tested on hardware; stored as `generator_settings` | Stimulus metadata for lab reports without locking the front panel |
+| 2026-10-26 | Run state from `:OPERegister:CONDition?` and `:TER?` | The EDUX1052A has no `:RSTate?` |
+| 2026-10-26 | Generator API uses methods with a channel argument (`set_frequency(1, 1e3)`) | Maps one-to-one onto the MATLAB wrapper and the server protocol |
+| 2026-10-26 | Simulators work at the SCPI transport level, below the real drivers | Tests exercise the real driver code, policy and parsing |
 | 2026-10-22 | Name: LabRador; package and command `labrador` | Personal project; EspoTek clash handled by a README note |
 | 2026-10-22 | `labrador doctor` and dedicated exit codes for missing VISA / instrument | Most likely first-run failure; one command to diagnose |
 | 2026-10-22 | Link to the VISA download page, never bundle the installer | Needs admin rights; redistribution terms unchecked |
@@ -684,10 +725,13 @@ Decisions made so far, newest first, followed by the questions still to settle. 
 ### Open questions
 
 - [ ] Exact R&S VISA download size and current download page URL.
-- [ ] Does `:RSTate?` exist on the EDUX1052A, and what does it return? (Programmer's Guide.)
-- [ ] Do `:MEASure:PHASe?` and `:MEASure:DELay?` take two sources as written?
-- [ ] Confirm every AFG1062 command in Section 5 against the AFG1000 manual, including the phase-alignment command.
-- [ ] How does the AFG1062 return to local control after remote commands?
+- [x] Does `:RSTate?` exist on the EDUX1052A? No. Use `:OPERegister:CONDition?` (bit 3 running, bit 5 armed) and `:TER?` (Section 5).
+- [ ] How can capture-on-Single tell a completed Single from the user pressing Stop? Decide in Phase 2 from the bit patterns recorded by the hardware check.
+- [x] Do `:MEASure:PHASe?` and `:MEASure:DELay?` take two sources as written? Yes (pages 389, 376).
+- [x] Confirm every AFG1062 command in Section 5 against the AFG1000 manual. Done; phase alignment is `SOURce1:PHASe:INITiate`.
+- [ ] Does the AFG1062 answer `*OPC?` (not in its manual)? Hardware check.
+- [ ] Does the AFG1062 amplitude follow the `VPP` suffix whatever unit the front panel shows? Hardware check.
+- [ ] How does the AFG1062 return to local control after remote commands? The manual has no command; check VISA go-to-local, and whether a query alone locks the front panel, with the hardware check. The answer sets the `--gen-metadata` default.
 - [ ] Can the `.exe` run on a JCU lab PC, and do lab PCs already have a VISA installed?
 - [ ] Will lab technical staff add LabRador and R&S VISA to the lab image?
 - [ ] Final `.mat` field names and CLI exit-code numbers (Phases 2 and 3).
@@ -696,4 +740,4 @@ Decisions made so far, newest first, followed by the questions still to settle. 
 - [ ] Optional `lbr` alias: yes or no?
 
 * [ ] Confirm neither instrument has a 10 MHz reference input or output (rear panels, manuals).
-* [ ] Does the AFG1062 have a sync or trigger output for triggering the scope (Phase 9)?
+* [ ] Does the AFG1062 have a sync or trigger output for triggering the scope (Phase 9)? Not in the programmer manual, which only mentions an external trigger input; check the rear panel and user manual.

@@ -26,5 +26,11 @@ include = ["labrador*"]
 [tool.ruff]
 line-length = 100
 
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN", "ERA"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

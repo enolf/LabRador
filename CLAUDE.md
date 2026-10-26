@@ -21,7 +21,8 @@ Full design: docs/design.md. Read the relevant sections before planning a phase.
 - Check every SCPI command against the manuals before using it. Never guess a command.
 
 ## Manuals (local only, not in Git)
-- docs/manuals/keysight-1000x-programmers-guide.pdf: EDUX1052A, InfiniiVision 1000 X-Series
+- docs/manuals/keysight-1000x-programmers-guide.pdf: EDUX1052A, InfiniiVision 1200 X-Series
+  and EDUX1052A/G Programmer's Guide (file name kept from an older download)
 - docs/manuals/tektronix-afg1000-programmer-manual.pdf: AFG1062, AFG1000 Series
 - A .txt copy of each (pdftotext) sits beside it; search the .txt for a command, then read
   only the relevant pages of the PDF.
@@ -40,3 +41,4 @@ Full design: docs/design.md. Read the relevant sections before planning a phase.
 
 ## Environment
 - Windows, Python 3.12 venv, R&S VISA.
+- Run Python tools through the venv: .venv\Scripts\python.exe -m pytest / -m ruff / -m pip.
