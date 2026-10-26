@@ -305,12 +305,6 @@ class Instrument:
         if reason is not None:
             raise ObserveModeError(command, reason)
 
-    def _ensure_control_mode(self, action: str) -> None:
-        if self._mode is not Mode.CONTROL:
-            raise ObserveModeError(
-                action, "observe mode never changes instrument settings; switch to control mode"
-            )
-
     def _raise_for_errors(self, command: str) -> None:
         errors = self.read_errors()
         if errors:
