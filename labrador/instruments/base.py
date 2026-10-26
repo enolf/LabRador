@@ -93,6 +93,7 @@ class Instrument:
     vendor_id: ClassVar[int]
     description: ClassVar[str]
     policy: ClassVar[CommandPolicy]
+    channels: ClassVar[tuple[int, ...]] = ()
     error_query: ClassVar[str] = "SYSTem:ERRor?"
 
     def __init__(
@@ -304,6 +305,11 @@ class Instrument:
         reason = self.policy.refusal(command, observe=self._mode is Mode.OBSERVE)
         if reason is not None:
             raise ObserveModeError(command, reason)
+
+    def _channel(self, channel: int) -> int:
+        if channel not in self.channels:
+            raise ValueError(f"The {self.description} has channels {self.channels}, not {channel}")
+        return channel
 
     def _raise_for_errors(self, command: str) -> None:
         errors = self.read_errors()

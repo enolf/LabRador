@@ -177,11 +177,6 @@ class Generator(Instrument):
             self.identity, {channel: self.channel_settings(channel) for channel in self.channels}
         )
 
-    def _channel(self, channel: int) -> int:
-        if channel not in self.channels:
-            raise ValueError(f"The {self.description} has channels {self.channels}, not {channel}")
-        return channel
-
 
 def read_generator_settings(
     address: str | None = None,
