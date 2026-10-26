@@ -1,13 +1,16 @@
 import math
+import re
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 
 import pyvisa
 
+from labrador.errors import UnexpectedReplyError
 from labrador.instruments.base import DEFAULT_TIMEOUT_S, Identity, Instrument, Mode
 from labrador.instruments.scpi import CommandPolicy
 from labrador.instruments.transport import Transport
 
+LEADING_NUMBER = re.compile(r"\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)")
 INFINITE_LOAD_THRESHOLD = 1e30
 MIN_LOAD_OHMS = 1.0
 MAX_LOAD_OHMS = 10_000.0
@@ -61,6 +64,7 @@ class Generator(Instrument):
     description = "function generator"
     channels = (1, 2)
     error_query = "SYSTem:ERRor?"
+    encoding = "gbk"
     policy = CommandPolicy.from_notation(
         [
             "*IDN?",
@@ -111,7 +115,12 @@ class Generator(Instrument):
         self.write(f"SOURce{self._channel(channel)}:VOLTage:LEVel:IMMediate:OFFSet {volts:.6G}")
 
     def load(self, channel: int) -> float:
-        ohms = self.query_float(f"OUTPut{self._channel(channel)}:IMPedance?")
+        command = f"OUTPut{self._channel(channel)}:IMPedance?"
+        reply = self.query(command)
+        number = LEADING_NUMBER.match(reply)
+        if number is None:
+            raise UnexpectedReplyError(self.description, command, reply)
+        ohms = float(number.group(1))
         return math.inf if ohms > INFINITE_LOAD_THRESHOLD else ohms
 
     def set_load(self, channel: int, ohms: float) -> None:

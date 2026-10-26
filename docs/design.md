@@ -273,7 +273,7 @@ A returned value of 9.9E+37 means the measurement could not be made (page 367); 
 | Frequency | `SOURce<n>:FREQuency:FIXed <Hz>` (not available in Sweep run mode) | 36 |
 | Amplitude (Vpp) | `SOURce<n>:VOLTage:LEVel:IMMediate:AMPLitude <v>VPP`. The amplitude unit follows the front-panel menu, so always send the `VPP` suffix. | 61 |
 | Offset | `SOURce<n>:VOLTage:LEVel:IMMediate:OFFSet <v>` | 61 |
-| Load setting | `OUTPut<n>:IMPedance INFinity` or `50` (1 Ω to 10 kΩ); the query returns `9.9E+37` for INFinity | 18 |
+| Load setting | `OUTPut<n>:IMPedance INFinity` or `50` (1 Ω to 10 kΩ); the manual says the query returns `9.9E+37` for INFinity. **Deviation:** firmware FV:V1.0.2 replies `50Ω` with the Ω encoded in GBK (bytes `A6 B8`), not a plain number (observed 2026-10-26); LabRador decodes AFG replies as GBK and reads the leading number. The reply at INFinity is recorded by the `--control` hardware check. | 18 |
 | Output on/off | `OUTPut<n>:STATe ON` or `OFF` (query returns `0` or `1`) | 18–19 |
 | Align the two channels' phase | `SOURce1:PHASe:INITiate` (either suffix aligns both channels; no query form) | 46 |
 | Return to local | No SCPI command in the manual (error −201 "Invalid while in local" exists). LabRador sends the VISA go-to-local control on close; the effect is checked with the hardware check. | 62 |

@@ -9,6 +9,7 @@ from labrador.errors import (
     InstrumentNotFoundError,
     InstrumentNotRespondingError,
     ObserveModeError,
+    UnexpectedReplyError,
     VisaNotFoundError,
 )
 from labrador.instruments import base
@@ -126,6 +127,12 @@ def test_timeout_override_applies_during_query():
     instrument.query(":LEVel?", timeout_s=20)
     assert transport.timeout_history[-1] == 20
     assert transport.timeout_s == 5.0
+
+
+def test_non_numeric_reply_to_numeric_query_is_unexpected_reply():
+    instrument = make(ScriptedTransport({":LEVel?": "high"}))
+    with pytest.raises(UnexpectedReplyError, match="high"):
+        instrument.query_float(":LEVel?")
 
 
 def test_unparsable_error_reply_is_not_responding():

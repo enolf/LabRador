@@ -3,6 +3,8 @@ import json
 import math
 import sys
 import time
+import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +15,6 @@ import pyvisa
 from labrador.errors import (
     InstrumentNotFoundError,
     InstrumentNotRespondingError,
-    LabradorError,
     ObserveModeError,
     SettingsChangedError,
     VisaNotFoundError,
@@ -364,6 +365,9 @@ def check_generator_and_scope_control(
             load=math.inf,
             output=True,
         )
+        report.info(
+            "Raw reply to OUTPut1:IMPedance? at INFinity", generator.query("OUTPut1:IMPedance?")
+        )
         readback = generator.channel_settings(1)
         report.check(
             "Generator settings read back",
@@ -452,25 +456,46 @@ def check_measurement_probes(report: Report, scope: Scope) -> None:
 def run(arguments: argparse.Namespace) -> int:
     report = Report(assume_yes=arguments.assume_yes)
     connections = Connections(arguments.simulated)
-    scope = None
+    if not guarded(report, "VISA", lambda: check_visa(report, connections)):
+        return finish(report)
+    scope = guarded(report, "Oscilloscope", lambda: check_scope_observe(report, connections))
     try:
-        if not check_visa(report, connections):
-            return finish(report)
-        scope = check_scope_observe(report, connections)
         if scope is not None:
-            check_scope_front_panel(report, scope, arguments.simulated)
-        check_generator_remote_mode(report, connections)
+            guarded(
+                report,
+                "Oscilloscope front panel",
+                lambda: check_scope_front_panel(report, scope, arguments.simulated),
+            )
+        guarded(
+            report,
+            "Generator remote-mode test",
+            lambda: check_generator_remote_mode(report, connections),
+        )
         if arguments.control:
-            check_generator_and_scope_control(report, connections, scope)
+            guarded(
+                report,
+                "Control-mode steps",
+                lambda: check_generator_and_scope_control(report, connections, scope),
+            )
         else:
             report.skip("Control-mode steps 5-7", "run with --control to include them")
-    except LabradorError as error:
-        report.check("Unexpected error", False, str(error))
     finally:
         if scope is not None:
             scope.close()
             report.ask("scope_panel_after_close", "Is the oscilloscope front panel usable?")
     return finish(report)
+
+
+def guarded[Result](report: Report, name: str, step: Callable[[], Result]) -> Result | None:
+    try:
+        return step()
+    except Exception as error:
+        report.check(
+            f"{name}: unexpected error",
+            False,
+            {"error": repr(error), "traceback": traceback.format_exc()},
+        )
+        return None
 
 
 def finish(report: Report) -> int:

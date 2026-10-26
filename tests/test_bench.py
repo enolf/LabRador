@@ -120,7 +120,7 @@ def test_observe_generator_metadata_opens_queries_and_releases():
             "SOURce1:VOLTage:LEVel:IMMediate:OFFSet?": "0",
             "SOURce2:VOLTage:LEVel:IMMediate:OFFSet?": "0",
             "OUTPut1:IMPedance?": "9.9E+37",
-            "OUTPut2:IMPedance?": "50",
+            "OUTPut2:IMPedance?": b"50\xa6\xb8",
             "OUTPut1:STATe?": "1",
             "OUTPut2:STATe?": "0",
         }
@@ -130,6 +130,7 @@ def test_observe_generator_metadata_opens_queries_and_releases():
     settings = bench.generator_settings()
     assert settings.channels[1].load_ohms == math.inf
     assert settings.channels[2].shape == "SQU"
+    assert settings.channels[2].load_ohms == 50.0
     assert generator.closed
     assert generator.ren_calls
     assert generator.written == []

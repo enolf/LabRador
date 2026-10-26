@@ -53,6 +53,17 @@ class InstrumentNotRespondingError(LabradorError):
         super().__init__(message)
 
 
+class UnexpectedReplyError(LabradorError):
+    def __init__(self, instrument: str, command: str, reply: str) -> None:
+        self.instrument = instrument
+        self.command = command
+        self.reply = reply
+        super().__init__(
+            f"The {instrument} gave an unexpected reply to {command!r}: {reply!r}. "
+            "Please report this, with the instrument's firmware version."
+        )
+
+
 class InstrumentNotConnectedError(LabradorError):
     def __init__(self, instrument: str, reason: str = "") -> None:
         self.instrument = instrument

@@ -22,6 +22,16 @@ def test_query_strips_reply():
     assert transport.query(":TER?") == "+1"
 
 
+def test_query_decodes_with_the_instrument_encoding():
+    resource = FakeVisaResource("X", {"OUTPut1:IMPedance?": b"50\xa6\xb8"})
+    assert VisaTransport(resource, 1, encoding="gbk").query("OUTPut1:IMPedance?") == "50Ω"
+
+
+def test_undecodable_reply_is_kept_visible_instead_of_raising():
+    resource = FakeVisaResource("X", {"OUTPut1:IMPedance?": b"50\xa6\xb8"})
+    assert VisaTransport(resource, 1).query("OUTPut1:IMPedance?") == "50\\xa6\\xb8"
+
+
 def test_query_block_reads_ieee_block_as_bytes_and_consumes_terminator():
     resource = FakeVisaResource("X")
     resource.block = b"\x00\x01\x80\xff"

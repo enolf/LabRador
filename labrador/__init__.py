@@ -7,6 +7,7 @@ from labrador.errors import (
     LabradorError,
     ObserveModeError,
     SettingsChangedError,
+    UnexpectedReplyError,
     VisaNotFoundError,
     WaveformUnavailableError,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "Scope",
     "SettingsChangedError",
     "Shape",
+    "UnexpectedReplyError",
     "VisaNotFoundError",
     "WaveformUnavailableError",
     "read_generator_settings",

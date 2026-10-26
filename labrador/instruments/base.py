@@ -15,6 +15,7 @@ from labrador.errors import (
     InstrumentNotFoundError,
     InstrumentNotRespondingError,
     ObserveModeError,
+    UnexpectedReplyError,
     VisaNotFoundError,
 )
 from labrador.instruments.scpi import CommandPolicy
@@ -95,6 +96,7 @@ class Instrument:
     policy: ClassVar[CommandPolicy]
     channels: ClassVar[tuple[int, ...]] = ()
     error_query: ClassVar[str] = "SYSTem:ERRor?"
+    encoding: ClassVar[str] = "ascii"
 
     def __init__(
         self,
@@ -232,7 +234,7 @@ class Instrument:
             raise InstrumentNotFoundError(
                 cls.description, f"{address} is not a message-based instrument"
             )
-        transport = VisaTransport(cast(MessageBasedResource, resource), timeout_s)
+        transport = VisaTransport(cast(MessageBasedResource, resource), timeout_s, cls.encoding)
         try:
             return cls(transport, mode=mode, check_errors=check_errors, address=address)
         except BaseException:
@@ -255,10 +257,14 @@ class Instrument:
             return reply
 
     def query_float(self, command: str) -> float:
-        return float(self.query(command))
+        reply = self.query(command)
+        try:
+            return float(reply)
+        except ValueError as error:
+            raise UnexpectedReplyError(self.description, command, reply) from error
 
     def query_int(self, command: str) -> int:
-        return int(float(self.query(command)))
+        return int(self.query_float(command))
 
     def query_block(self, command: str, *, timeout_s: float | None = None) -> bytes:
         self._ensure_allowed(command)

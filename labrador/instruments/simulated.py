@@ -10,6 +10,7 @@ from labrador.instruments.transport import TransportError
 
 GENERATOR_SOURCE_OHMS = 50.0
 INFINITY_REPLY = "9.9E+37"
+OHM_SIGN = "Ω"
 
 _QUANTITY = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*([a-zA-Z]*)\s*$")
 _FREQUENCY_UNITS = {"": 1.0, "HZ": 1.0, "KHZ": 1e3, "MHZ": 1e6}
@@ -71,7 +72,7 @@ class SimulatedDevice:
         self.add_handler("*OPC?", lambda command, suffixes: "1")
 
     def add_handler(self, notation: str, handler: Handler) -> None:
-        self._handlers.append((ScpiPattern(notation), handler))
+        self._handlers.insert(0, (ScpiPattern(notation), handler))
 
     def write(self, message: str) -> None:
         self._execute(message)
@@ -182,15 +183,15 @@ class SimulatedGeneratorDevice(SimulatedDevice):
         self.add_handler("[SOURce#]:FUNCtion[:SHAPe]", self._set_shape)
         self.add_handler("[SOURce#]:FUNCtion[:SHAPe]?", self._get("shape"))
         self.add_handler("[SOURce#]:FREQuency[:CW|:FIXed]", self._set_frequency)
-        self.add_handler("[SOURce#]:FREQuency[:CW|:FIXed]?", self._get("frequency_hz", "{:.10E}"))
+        self.add_handler("[SOURce#]:FREQuency[:CW|:FIXed]?", self._get("frequency_hz", "{:.6e}"))
         self.add_handler("[SOURce#]:VOLTage[:LEVel][:IMMediate]:OFFSet", self._set_offset)
         self.add_handler(
-            "[SOURce#]:VOLTage[:LEVel][:IMMediate]:OFFSet?", self._get("offset_v", "{:.4E}")
+            "[SOURce#]:VOLTage[:LEVel][:IMMediate]:OFFSet?", self._get("offset_v", "{:.6e}")
         )
         self.add_handler("[SOURce#]:VOLTage[:LEVel][:IMMediate][:AMPLitude]", self._set_amplitude)
         self.add_handler(
             "[SOURce#]:VOLTage[:LEVel][:IMMediate][:AMPLitude]?",
-            self._get("amplitude_vpp", "{:.4E}"),
+            self._get("amplitude_vpp", "{:.6e}"),
         )
         self.add_handler("OUTPut#:IMPedance", self._set_load)
         self.add_handler("OUTPut#:IMPedance?", self._get_load)
@@ -259,7 +260,7 @@ class SimulatedGeneratorDevice(SimulatedDevice):
 
     def _get_load(self, command: ScpiCommand, suffixes: list[int | None]) -> str:
         ohms = self._channel_state(suffixes).load_ohms
-        return INFINITY_REPLY if math.isinf(ohms) else f"{ohms:.4E}"
+        return INFINITY_REPLY if math.isinf(ohms) else f"{ohms:g}{OHM_SIGN}"
 
     def _set_output(self, command: ScpiCommand, suffixes: list[int | None]) -> None:
         self._channel_state(suffixes).output_on = parse_switch(command.arguments)

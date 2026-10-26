@@ -34,8 +34,11 @@ class Transport(Protocol):
 
 
 class VisaTransport:
-    def __init__(self, resource: MessageBasedResource, timeout_s: float) -> None:
+    def __init__(
+        self, resource: MessageBasedResource, timeout_s: float, encoding: str = "ascii"
+    ) -> None:
         self._resource = resource
+        self.encoding = encoding
         resource.read_termination = TERMINATION
         resource.write_termination = TERMINATION
         self.timeout_s = timeout_s
@@ -58,7 +61,9 @@ class VisaTransport:
 
     def query(self, message: str) -> str:
         with _translated_errors(message):
-            return self._resource.query(message).strip()
+            self._resource.write(message)
+            reply = self._resource.read_raw()
+        return reply.decode(self.encoding, errors="backslashreplace").strip()
 
     def query_block(self, message: str) -> bytes:
         with _translated_errors(message):

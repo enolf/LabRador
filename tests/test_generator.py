@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from labrador.errors import InstrumentCommandError, ObserveModeError
+from labrador.errors import InstrumentCommandError, ObserveModeError, UnexpectedReplyError
 from labrador.instruments.base import Mode
 from labrador.instruments.generator import Generator, Shape, read_generator_settings
 from labrador.instruments.simulated import SimulatedGeneratorDevice
@@ -60,6 +60,18 @@ def test_values_read_back(generator):
     assert generator.offset(2) == pytest.approx(0.1)
     assert generator.load(2) == pytest.approx(1000)
     assert generator.output(2) is True
+
+
+def test_finite_load_reply_with_ohm_sign_is_parsed(device, generator):
+    generator.set_load(1, 50)
+    assert generator.query("OUTPut1:IMPedance?") == "50Ω"
+    assert generator.load(1) == 50.0
+
+
+def test_load_reply_without_a_number_is_unexpected(device, generator):
+    device.add_handler("OUTPut#:IMPedance?", lambda command, suffixes: "HighZ")
+    with pytest.raises(UnexpectedReplyError, match="HighZ"):
+        generator.load(1)
 
 
 def test_infinite_load_round_trips(generator):

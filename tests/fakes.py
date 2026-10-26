@@ -73,28 +73,38 @@ class FakeInstrument(Instrument):
 
 
 class FakeVisaResource:
-    def __init__(self, name: str, replies: dict[str, str] | None = None) -> None:
+    def __init__(self, name: str, replies: dict[str, str | bytes] | None = None) -> None:
         self.resource_name = name
         self.read_termination: str | None = None
         self.write_termination: str | None = None
         self.timeout = 2000
-        self.replies = {"*IDN?": FAKE_IDN, "SYSTem:ERRor?": '+0,"No error"'}
+        self.replies: dict[str, str | bytes] = {
+            "*IDN?": FAKE_IDN,
+            "SYSTem:ERRor?": '+0,"No error"',
+        }
         self.replies.update(replies or {})
         self.written: list[str] = []
+        self.queried: list[str] = []
         self.binary_calls: list[tuple[str, dict]] = []
         self.block = b""
         self.query_error: Exception | None = None
         self.ren_calls: list[object] = []
         self.ren_error: Exception | None = None
         self.closed = False
+        self._pending_reply = b""
 
     def write(self, message: str) -> None:
-        self.written.append(message)
+        if not message.split(" ")[0].endswith("?"):
+            self.written.append(message)
+            return
+        self.queried.append(message)
+        reply = self.replies[message]
+        self._pending_reply = (reply if isinstance(reply, bytes) else reply.encode()) + b"\n"
 
-    def query(self, message: str) -> str:
+    def read_raw(self) -> bytes:
         if self.query_error is not None:
             raise self.query_error
-        return self.replies[message] + "\n"
+        return self._pending_reply
 
     def query_binary_values(self, message: str, **options: object) -> bytes:
         self.binary_calls.append((message, options))
